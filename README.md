@@ -7,7 +7,14 @@ fn main() {
     assert_eq!(b, [1, 2, 3, 4, 5, 6]);
 }
 ```
-To build, follow the same instructions as normal.
+To run, follow the same instructions as normal.
+
+### Details
+Basically, this adds a new expression (that kind of replaces the legacy inclusive range) that is processed in a special way when put in an array. Functionally, this allows to spread existing arrays into an array literal.
+
+This is very hacky, in a real implementation it should probably be embedded into the array nodes, but I started doing this first and also it might be less work this way. Also, since this is an expression and I didn't implement any MIR lowering for it (except for the special array logic) you really don't want to use it elsewhere, or you're risking summoning the ice demons. It's also (improperly) typed the same as the underlying array.
+
+The operation moves from the original array.
 
 # The original readme
 
