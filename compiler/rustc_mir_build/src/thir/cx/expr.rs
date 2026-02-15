@@ -623,6 +623,8 @@ impl<'tcx> ThirBuildCx<'tcx> {
                 }
             }
 
+            hir::ExprKind::SpreadOf(arg) => ExprKind::Spread { arg: self.mirror_expr(arg) },
+
             hir::ExprKind::Struct(qpath, fields, ref base) => match expr_ty.kind() {
                 ty::Adt(adt, args) => match adt.adt_kind() {
                     AdtKind::Struct | AdtKind::Union => {

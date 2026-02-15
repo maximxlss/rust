@@ -335,6 +335,10 @@ impl<'p, 'tcx> MatchVisitor<'p, 'tcx> {
             // These are statements that evaluate to `()`.
             Assign { .. } | AssignOp { .. } | InlineAsm { .. } | Let { .. } => true,
 
+            Spread { .. } => {
+                todo!("uhh");
+            }
+
             // These evaluate to a value.
             RawBorrow { .. }
             | Adt { .. }

@@ -153,6 +153,7 @@ impl CheckInlineAssembly {
             | ExprKind::Index(..)
             | ExprKind::Path(..)
             | ExprKind::AddrOf(..)
+            | ExprKind::SpreadOf(..)
             | ExprKind::Let(..)
             | ExprKind::Break(..)
             | ExprKind::Continue(..)

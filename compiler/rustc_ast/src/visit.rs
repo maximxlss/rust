@@ -984,6 +984,8 @@ macro_rules! common_visitor_and_walkers {
                     visit_visitable!($($mut)? vis, op, lhs, rhs),
                 ExprKind::AddrOf(kind, mutbl, subexpression) =>
                     visit_visitable!($($mut)? vis, kind, mutbl, subexpression),
+                ExprKind::SpreadOf(subexpression) =>
+                    visit_visitable!($($mut)? vis, subexpression),
                 ExprKind::Unary(op, subexpression) =>
                     visit_visitable!($($mut)? vis, op, subexpression),
                 ExprKind::Cast(subexpression, typ) | ExprKind::Type(subexpression, typ) =>

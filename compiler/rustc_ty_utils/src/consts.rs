@@ -139,6 +139,9 @@ fn recurse_build<'tcx>(
         ExprKind::RawBorrow { .. } | ExprKind::Deref { .. } => maybe_supported_error(
             GenericConstantTooComplexSub::AddressAndDerefNotSupported(node.span),
         )?,
+        ExprKind::Spread { .. } => {
+            maybe_supported_error(GenericConstantTooComplexSub::SpreadNotSupported(node.span))?
+        }
         ExprKind::Repeat { .. } | ExprKind::Array { .. } => {
             maybe_supported_error(GenericConstantTooComplexSub::ArrayNotSupported(node.span))?
         }
@@ -268,6 +271,7 @@ impl<'a, 'tcx> IsThirPolymorphic<'a, 'tcx> {
             | thir::ExprKind::Binary { .. }
             | thir::ExprKind::LogicalOp { .. }
             | thir::ExprKind::Unary { .. }
+            | thir::ExprKind::Spread { .. }
             | thir::ExprKind::Cast { .. }
             | thir::ExprKind::Use { .. }
             | thir::ExprKind::NeverToAny { .. }

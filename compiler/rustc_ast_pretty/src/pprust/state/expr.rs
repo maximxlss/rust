@@ -368,6 +368,15 @@ impl<'a> State<'a> {
         );
     }
 
+    fn print_expr_spread_of(&mut self, expr: &ast::Expr, fixup: FixupContext) {
+        self.word("...");
+        self.print_expr_cond_paren(
+            expr,
+            fixup.precedence(expr) < ExprPrecedence::Prefix,
+            fixup.rightmost_subexpression(),
+        );
+    }
+
     pub(super) fn print_expr(&mut self, expr: &ast::Expr, fixup: FixupContext) {
         self.print_expr_outer_attr_style(expr, true, fixup)
     }
@@ -464,6 +473,9 @@ impl<'a> State<'a> {
             }
             ast::ExprKind::AddrOf(k, m, expr) => {
                 self.print_expr_addr_of(*k, *m, expr, fixup);
+            }
+            ast::ExprKind::SpreadOf(expr) => {
+                self.print_expr_spread_of(expr, fixup);
             }
             ast::ExprKind::Lit(token_lit) => {
                 self.print_token_literal(*token_lit, expr.span);

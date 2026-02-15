@@ -530,6 +530,10 @@ impl<'a> Parser<'a> {
             token::And | token::AndAnd => {
                 make_it!(this, attrs, |this, _| this.parse_expr_borrow(lo))
             }
+            // ARRAY_SPREAD: `...expr`
+            token::DotDotDot => {
+                make_it!(this, attrs, |this, _| this.parse_expr_spread(lo))
+            }
             // `+lit`
             token::Plus if this.look_ahead(1, |tok| tok.is_numeric_lit()) => {
                 let mut err = errors::LeadingPlusNotSupported {
@@ -860,6 +864,20 @@ impl<'a> Parser<'a> {
 
     fn error_remove_borrow_lifetime(&self, span: Span, lt_span: Span) {
         self.dcx().emit_err(errors::LifetimeInBorrowExpression { span, lifetime_span: lt_span });
+    }
+
+    /// Parse `...<expr>`.
+    fn parse_expr_spread(&mut self, lo: Span) -> PResult<'a, (Span, ExprKind)> {
+        self.bump();
+        let attrs = self.parse_outer_attributes()?;
+        let expr = if self.token.is_range_separator() {
+            self.parse_expr_prefix_range(attrs)
+        } else {
+            self.parse_expr_prefix(attrs)
+        }?;
+        let hi = self.interpolated_or_expr_span(&expr);
+        let span = lo.to(hi);
+        Ok((span, ExprKind::SpreadOf(expr)))
     }
 
     /// Parse `mut?` or `[ raw | pin ] [ const | mut ]`.
@@ -4354,6 +4372,7 @@ impl MutVisitor for CondChecker<'_> {
             | ExprKind::Range(_, _, _)
             | ExprKind::Try(_)
             | ExprKind::AddrOf(_, _, _)
+            | ExprKind::SpreadOf(_)
             | ExprKind::Binary(_, _, _)
             | ExprKind::Field(_, _)
             | ExprKind::Index(_, _, _)

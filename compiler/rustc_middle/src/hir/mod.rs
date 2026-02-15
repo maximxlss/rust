@@ -284,6 +284,7 @@ impl<'tcx> TyCtxt<'tcx> {
                     | ExprKind::MethodCall(_, _, _, _)
                     | ExprKind::Tup(_)
                     | ExprKind::Binary(_, _, _)
+                    | ExprKind::SpreadOf(_)
                     | ExprKind::Unary(_, _)
                     | ExprKind::Cast(_, _)
                     | ExprKind::DropTemps(_)

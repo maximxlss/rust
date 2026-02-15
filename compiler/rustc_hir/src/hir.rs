@@ -2469,6 +2469,7 @@ impl Expr<'_> {
 
             // Unary, prefix
             ExprKind::AddrOf(..)
+            | ExprKind::SpreadOf(..)
             // Here `let pats = expr` has `let pats =` as a "unary" prefix of `expr`.
             // However, this is not exactly right. When `let _ = a` is the LHS of a binop we
             // need parens sometimes. E.g. we can print `(let _ = a) && b` as `let _ = a && b`
@@ -2568,6 +2569,7 @@ impl Expr<'_> {
             | ExprKind::ConstBlock(..)
             | ExprKind::Unary(..)
             | ExprKind::AddrOf(..)
+            | ExprKind::SpreadOf(..)
             | ExprKind::Binary(..)
             | ExprKind::Yield(..)
             | ExprKind::Cast(..)
@@ -2632,6 +2634,7 @@ impl Expr<'_> {
             | ExprKind::Field(base, _)
             | ExprKind::Index(base, _, _)
             | ExprKind::AddrOf(.., base)
+            | ExprKind::SpreadOf(base)
             | ExprKind::Cast(base, _)
             | ExprKind::UnsafeBinderCast(_, base, _) => {
                 // This isn't exactly true for `Index` and all `Unary`, but we are using this
@@ -2899,6 +2902,8 @@ pub enum ExprKind<'hir> {
     Ret(Option<&'hir Expr<'hir>>),
     /// A `become`, with the value to be returned.
     Become(&'hir Expr<'hir>),
+
+    SpreadOf(&'hir Expr<'hir>),
 
     /// Inline assembly (from `asm!`), with its outputs and inputs.
     InlineAsm(&'hir InlineAsm<'hir>),

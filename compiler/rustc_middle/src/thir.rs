@@ -464,6 +464,10 @@ pub enum ExprKind<'tcx> {
         did: DefId,
         args: GenericArgsRef<'tcx>,
     },
+    /// Spread expression, e.g. `...arr`.
+    Spread {
+        arg: ExprId,
+    },
     /// An array literal constructed from one repeated element, e.g. `[1; 5]`.
     Repeat {
         value: ExprId,

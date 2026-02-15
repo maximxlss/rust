@@ -1416,6 +1416,11 @@ impl<'a> State<'a> {
         self.print_expr_cond_paren(expr, self.precedence(expr) < ExprPrecedence::Prefix);
     }
 
+    fn print_expr_spread_of(&mut self, expr: &hir::Expr<'_>) {
+        self.word("...");
+        self.print_expr_cond_paren(expr, self.precedence(expr) < ExprPrecedence::Prefix);
+    }
+
     fn print_literal(&mut self, lit: &hir::Lit) {
         self.maybe_print_comment(lit.span.lo());
         self.word(lit.node.to_string())
@@ -1551,6 +1556,9 @@ impl<'a> State<'a> {
             }
             hir::ExprKind::AddrOf(k, m, expr) => {
                 self.print_expr_addr_of(k, m, expr);
+            }
+            hir::ExprKind::SpreadOf(expr) => {
+                self.print_expr_spread_of(expr);
             }
             hir::ExprKind::Lit(lit) => {
                 self.print_literal(&lit);

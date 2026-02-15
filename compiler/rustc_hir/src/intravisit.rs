@@ -852,7 +852,9 @@ pub fn walk_expr<'v, V: Visitor<'v>>(visitor: &mut V, expression: &'v Expr<'v>) 
             try_visit!(visitor.visit_expr(left_expression));
             try_visit!(visitor.visit_expr(right_expression));
         }
-        ExprKind::AddrOf(_, _, ref subexpression) | ExprKind::Unary(_, ref subexpression) => {
+        ExprKind::AddrOf(_, _, ref subexpression)
+        | ExprKind::Unary(_, ref subexpression)
+        | ExprKind::SpreadOf(ref subexpression) => {
             try_visit!(visitor.visit_expr(subexpression));
         }
         ExprKind::Cast(ref subexpression, ref typ) | ExprKind::Type(ref subexpression, ref typ) => {

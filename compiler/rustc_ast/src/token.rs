@@ -640,7 +640,7 @@ impl Token {
     }
 
     pub fn is_range_separator(&self) -> bool {
-        [DotDot, DotDotDot, DotDotEq].contains(&self.kind)
+        [DotDot, DotDotEq].contains(&self.kind)
     }
 
     pub fn is_punct(&self) -> bool {
@@ -679,8 +679,8 @@ impl Token {
             Or | OrOr                         | // closure
             And                               | // reference
             AndAnd                            | // double reference
-            // DotDotDot is no longer supported, but we need some way to display the error
-            DotDot | DotDotDot | DotDotEq     | // range notation
+            DotDotDot                         | // spread
+            DotDot | DotDotEq                 | // range notation
             Lt | Shl                          | // associated path
             PathSep                           | // global path
             Lifetime(..)                      | // labeled loop

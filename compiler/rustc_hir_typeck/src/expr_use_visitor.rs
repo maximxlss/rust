@@ -517,6 +517,10 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
                 self.consume_expr(lhs)?;
             }
 
+            hir::ExprKind::SpreadOf(arg) => {
+                self.consume_expr(arg)?;
+            }
+
             hir::ExprKind::Binary(_, lhs, rhs) => {
                 self.consume_expr(lhs)?;
                 self.consume_expr(rhs)?;
@@ -1370,6 +1374,7 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
             | hir::ExprKind::Ret(..)
             | hir::ExprKind::Become(..)
             | hir::ExprKind::Unary(..)
+            | hir::ExprKind::SpreadOf(..)
             | hir::ExprKind::Yield(..)
             | hir::ExprKind::MethodCall(..)
             | hir::ExprKind::Cast(..)

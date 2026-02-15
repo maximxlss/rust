@@ -287,6 +287,9 @@ impl<'cx, 'a> Context<'cx, 'a> {
                     this.manage_cond_expr(local_expr)
                 });
             }
+            ExprKind::SpreadOf(local_expr) => {
+                self.manage_cond_expr(local_expr);
+            }
             // Expressions that are not worth or can not be captured.
             //
             // Full list instead of `_` to catch possible future inclusions and to

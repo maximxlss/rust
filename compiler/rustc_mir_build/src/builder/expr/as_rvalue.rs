@@ -3,7 +3,6 @@
 use rustc_abi::FieldIdx;
 use rustc_hir::lang_items::LangItem;
 use rustc_index::{Idx, IndexVec};
-use rustc_middle::bug;
 use rustc_middle::middle::region::{self, TempLifetime};
 use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::*;
@@ -12,6 +11,7 @@ use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::cast::{CastTy, mir_cast_kind};
 use rustc_middle::ty::util::IntTypeExt;
 use rustc_middle::ty::{self, Ty, UpvarArgs};
+use rustc_middle::{bug, span_bug};
 use rustc_span::source_map::Spanned;
 use rustc_span::{DUMMY_SP, Span};
 use tracing::debug;
@@ -264,23 +264,55 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
                 // first process the set of fields
                 let el_ty = expr.ty.sequence_element_type(this.tcx);
-                let fields: IndexVec<FieldIdx, _> = fields
-                    .into_iter()
-                    .copied()
-                    .map(|f| {
-                        unpack!(
-                            block = this.as_operand(
-                                block,
-                                scope,
-                                f,
-                                LocalInfo::Boring,
-                                NeedsTemporary::Maybe
-                            )
-                        )
-                    })
-                    .collect();
+                let mut field_values: IndexVec<FieldIdx, _> = IndexVec::new();
+                for f in fields.iter().copied() {
+                    let mut field_expr = f;
+                    while let ExprKind::Scope { value, .. } = this.thir[field_expr].kind {
+                        field_expr = value;
+                    }
 
-                block.and(Rvalue::Aggregate(Box::new(AggregateKind::Array(el_ty)), fields))
+                    if let ExprKind::Spread { arg } = this.thir[field_expr].kind {
+                        let arg_expr = &this.thir[arg];
+                        let (len, _) = match arg_expr.ty.kind() {
+                            ty::Array(elem_ty, len_const) => (
+                                len_const.try_to_target_usize(this.tcx).unwrap_or_else(|| {
+                                    span_bug!(arg_expr.span, "array spread length not evaluable")
+                                }),
+                                *elem_ty,
+                            ),
+                            _ => span_bug!(arg_expr.span, "array spread of non-array type"),
+                        };
+
+                        let arg_temp =
+                            unpack!(block = this.as_temp(block, scope, arg, Mutability::Not));
+                        let base = Place::from(arg_temp);
+                        let min_length = u64::try_from(len).unwrap();
+                        for offset in 0..min_length {
+                            let elem_place = this.tcx.mk_place_elem(
+                                base,
+                                PlaceElem::ConstantIndex { offset, min_length, from_end: false },
+                            );
+                            field_values.push(this.consume_by_copy_or_move(elem_place));
+                        }
+                        continue;
+                    }
+
+                    let val = unpack!(
+                        block = this.as_operand(
+                            block,
+                            scope,
+                            f,
+                            LocalInfo::Boring,
+                            NeedsTemporary::Maybe
+                        )
+                    );
+                    field_values.push(val);
+                }
+
+                block.and(Rvalue::Aggregate(Box::new(AggregateKind::Array(el_ty)), field_values))
+            }
+            ExprKind::Spread { .. } => {
+                todo!("uhh");
             }
             ExprKind::Tuple { ref fields } => {
                 // see (*) above

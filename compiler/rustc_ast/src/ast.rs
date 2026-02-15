@@ -1588,6 +1588,7 @@ impl Expr {
 
             // Unary, prefix
             ExprKind::AddrOf(..)
+            | ExprKind::SpreadOf(..)
             // Here `let pats = expr` has `let pats =` as a "unary" prefix of `expr`.
             // However, this is not exactly right. When `let _ = a` is the LHS of a binop we
             // need parens sometimes. E.g. we can print `(let _ = a) && b` as `let _ = a && b`
@@ -1854,6 +1855,8 @@ pub enum ExprKind {
     Continue(Option<Label>),
     /// A `return`, with an optional value to be returned.
     Ret(Option<Box<Expr>>),
+
+    SpreadOf(Box<Expr>),
 
     /// Output of the `asm!()` macro.
     InlineAsm(Box<InlineAsm>),

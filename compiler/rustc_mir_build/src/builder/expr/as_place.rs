@@ -569,6 +569,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             | ExprKind::Assign { .. }
             | ExprKind::AssignOp { .. }
             | ExprKind::Break { .. }
+            | ExprKind::Spread { .. }
             | ExprKind::Continue { .. }
             | ExprKind::ConstContinue { .. }
             | ExprKind::Return { .. }

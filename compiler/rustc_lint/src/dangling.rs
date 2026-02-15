@@ -308,6 +308,9 @@ fn is_temporary_rvalue(expr: &Expr<'_>) -> bool {
 
         ExprKind::Struct(..) => true,
 
+        // Spread is rvalue
+        ExprKind::SpreadOf(..) => true,
+
         // FIXME: this has false negatives, but I do not want to deal with 'static/const promotion just yet.
         ExprKind::Array(..) => false,
 

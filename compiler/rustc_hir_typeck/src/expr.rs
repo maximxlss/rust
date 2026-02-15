@@ -402,6 +402,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             }
             ExprKind::DropTemps(e) => self.check_expr_with_expectation(e, expected),
             ExprKind::Array(args) => self.check_expr_array(args, expected, expr),
+            ExprKind::SpreadOf(arg) => self.check_expr_spread_of(arg, expected, expr),
             ExprKind::ConstBlock(ref block) => self.check_expr_const_block(block, expected),
             ExprKind::Repeat(element, ref count) => {
                 self.check_expr_repeat(element, count, expected, expr)
@@ -1679,8 +1680,68 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 })
                 .unwrap_or_else(|| self.next_ty_var(expr.span));
             let mut coerce = CoerceMany::with_capacity(coerce_to, args.len());
+            let mut array_len: u64 = 0;
+            let mut spread_error: Option<ErrorGuaranteed> = None;
+            let mut spread_elem_ty: Option<Ty<'tcx>> = None;
+            let mut saw_non_spread = false;
 
             for e in args {
+                if let ExprKind::SpreadOf(arg) = e.kind {
+                    let arg_ty = self.check_expr(arg);
+                    let arg_ty = self.structurally_resolve_type(arg.span, arg_ty);
+                    let (elem_ty, len_const) = match arg_ty.kind() {
+                        ty::Array(elem_ty, len_const) => (*elem_ty, *len_const),
+                        _ => {
+                            let guar = self
+                                .dcx()
+                                .struct_span_err(e.span, "can't spread non-array in array")
+                                .emit();
+                            self.write_ty(e.hir_id, Ty::new_error(self.tcx, guar));
+                            spread_error.get_or_insert(guar);
+                            continue;
+                        }
+                    };
+                    self.write_ty(e.hir_id, arg_ty);
+                    let len_const = self.try_structurally_resolve_const(e.span, len_const);
+                    let Some(len) = len_const.try_to_target_usize(self.tcx) else {
+                        let guar = self
+                            .dcx()
+                            .struct_span_err(
+                                e.span,
+                                "array spread length must be known at compile time",
+                            )
+                            .emit();
+                        self.write_ty(e.hir_id, Ty::new_error(self.tcx, guar));
+                        spread_error.get_or_insert(guar);
+                        continue;
+                    };
+
+                    array_len = array_len.saturating_add(len);
+                    let elem_ty = self.structurally_resolve_type(e.span, elem_ty);
+                    let cause = self.misc(e.span);
+                    let merged = match spread_elem_ty {
+                        None => elem_ty,
+                        Some(prev) => match self.at(&cause, self.param_env).lub(prev, elem_ty) {
+                            Ok(infer_ok) => self.register_infer_ok_obligations(infer_ok),
+                            Err(err) => {
+                                let guar = self
+                                    .err_ctxt()
+                                    .report_mismatched_types(
+                                        &cause,
+                                        self.param_env,
+                                        prev,
+                                        elem_ty,
+                                        err,
+                                    )
+                                    .emit();
+                                spread_error.get_or_insert(guar);
+                                prev
+                            }
+                        },
+                    };
+                    spread_elem_ty = Some(merged);
+                    continue;
+                }
                 // FIXME: the element expectation should use
                 // `try_structurally_resolve_and_adjust_for_branches` just like in `if` and `match`.
                 // While that fixes nested coercion, it will break [some
@@ -1689,14 +1750,59 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 let e_ty = self.check_expr_with_hint(e, coerce_to);
                 let cause = self.misc(e.span);
                 coerce.coerce(self, &cause, e, e_ty);
+                array_len = array_len.saturating_add(1);
+                saw_non_spread = true;
             }
-            coerce.complete(self)
+            if let Some(guar) = spread_error {
+                Ty::new_error(self.tcx, guar)
+            } else {
+                let element_ty = match (saw_non_spread, spread_elem_ty) {
+                    (false, Some(spread_ty)) => spread_ty,
+                    (true, None) => coerce.complete(self),
+                    (true, Some(spread_ty)) => {
+                        let base = coerce.complete(self);
+                        let cause = self.misc(expr.span);
+                        match self.at(&cause, self.param_env).lub(base, spread_ty) {
+                            Ok(infer_ok) => self.register_infer_ok_obligations(infer_ok),
+                            Err(err) => {
+                                let guar = self
+                                    .err_ctxt()
+                                    .report_mismatched_types(
+                                        &cause,
+                                        self.param_env,
+                                        base,
+                                        spread_ty,
+                                        err,
+                                    )
+                                    .emit();
+                                Ty::new_error(self.tcx, guar)
+                            }
+                        }
+                    }
+                    (false, None) => coerce.complete(self),
+                };
+                self.suggest_array_len(expr, array_len);
+                return Ty::new_array(self.tcx, element_ty, array_len);
+            }
         } else {
             self.next_ty_var(expr.span)
         };
         let array_len = args.len() as u64;
         self.suggest_array_len(expr, array_len);
         Ty::new_array(self.tcx, element_ty, array_len)
+    }
+
+    fn check_expr_spread_of(
+        &self,
+        arg: &'tcx hir::Expr<'tcx>,
+        _expected: Expectation<'tcx>,
+        expr: &'tcx hir::Expr<'tcx>,
+    ) -> Ty<'tcx> {
+        let arr_t = self.check_expr(arg);
+        let ty::Array(..) = arr_t.kind() else {
+            return Ty::new_error_with_message(self.tcx, expr.span, "Can't spread non-array.");
+        };
+        arr_t
     }
 
     fn suggest_array_len(&self, expr: &'tcx hir::Expr<'tcx>, array_len: u64) {

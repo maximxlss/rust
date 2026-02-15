@@ -171,6 +171,10 @@ impl<'hir> LoweringContext<'_, 'hir> {
                     let ohs = self.lower_expr(ohs);
                     hir::ExprKind::AddrOf(*k, *m, ohs)
                 }
+                ExprKind::SpreadOf(ohs) => {
+                    let ohs = self.lower_expr(ohs);
+                    hir::ExprKind::SpreadOf(ohs)
+                }
                 ExprKind::Let(pat, scrutinee, span, recovered) => {
                     hir::ExprKind::Let(self.arena.alloc(hir::LetExpr {
                         span: self.lower_span(*span),

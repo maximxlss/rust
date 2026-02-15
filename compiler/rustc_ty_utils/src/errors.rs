@@ -31,6 +31,8 @@ pub(crate) enum GenericConstantTooComplexSub {
     AddressAndDerefNotSupported(#[primary_span] Span),
     #[label("array construction is not supported in generic constants")]
     ArrayNotSupported(#[primary_span] Span),
+    #[label("spread is not supported in generic constants")]
+    SpreadNotSupported(#[primary_span] Span),
     #[label("blocks are not supported in generic constants")]
     BlockNotSupported(#[primary_span] Span),
     #[label("coercing the `never` type is not supported in generic constants")]

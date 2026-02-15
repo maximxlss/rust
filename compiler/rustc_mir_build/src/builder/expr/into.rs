@@ -767,6 +767,10 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 resume.unit()
             }
 
+            ExprKind::Spread { .. } => {
+                todo!("uhh");
+            }
+
             // these are the cases that are more naturally handled by some other mode
             ExprKind::Unary { .. }
             | ExprKind::Binary { .. }
