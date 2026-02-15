@@ -1,3 +1,16 @@
+# Fork readme
+This is my fork of rust with spread syntax support:
+```Rust
+fn main() {
+    let a = [1, 2, 3];
+    let b = [...a, 4, 5, 6];
+    assert_eq!(b, [1, 2, 3, 4, 5, 6]);
+}
+```
+To build, follow the same instructions as normal.
+
+# The original readme
+
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rust-lang/www.rust-lang.org/master/static/images/rust-social-wide-dark.svg">
