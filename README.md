@@ -1,6 +1,7 @@
 # Fork readme
 This is my fork of rust, it contains some experiments:
 - Spreads support: [spreads](https://github.com/maximxlss/rust/tree/spreads)
+- Default function arguments (authored by Codex): [optional-fn-args](https://github.com/maximxlss/rust/tree/optional-fn-args)
 
 # The original readme
 
