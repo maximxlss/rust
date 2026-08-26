@@ -109,10 +109,11 @@ impl Spanned for ast::Arm {
 
 impl Spanned for ast::Param {
     fn span(&self) -> Span {
+        let hi = self.default.as_ref().map_or(self.ty.span.hi(), |default| default.value.span.hi());
         if crate::items::is_named_param(self) {
-            mk_sp(crate::items::span_lo_for_param(self), self.ty.span.hi())
+            mk_sp(crate::items::span_lo_for_param(self), hi)
         } else {
-            self.ty.span
+            self.ty.span.with_hi(hi)
         }
     }
 }

@@ -1360,6 +1360,10 @@ impl<'hir> LoweringContext<'_, 'hir> {
         hir::Param {
             hir_id,
             pat: self.lower_pat(&param.pat),
+            default: param
+                .default
+                .as_ref()
+                .map(|default| self.lower_anon_const_to_anon_const(default, default.value.span)),
             ty_span: self.lower_span(param.ty.span),
             span: self.lower_span(param.span),
         }
@@ -1550,6 +1554,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
             let new_parameter = hir::Param {
                 hir_id: parameter.hir_id,
                 pat: new_parameter_pat,
+                default: parameter.default,
                 ty_span: self.lower_span(parameter.ty_span),
                 span: self.lower_span(parameter.span),
             };

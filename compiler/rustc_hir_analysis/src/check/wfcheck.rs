@@ -1637,6 +1637,26 @@ fn check_fn_or_method<'tcx>(
         );
     }
 
+    for &default_def_id in tcx.fn_arg_defaults(def_id).iter().flatten() {
+        if let Some(_ty) = tcx.type_of(default_def_id).no_bound_vars() {
+            // As with default field values, do not try to evaluate a bare const parameter: it
+            // cannot be evaluated before instantiation. Other defaults are evaluated proactively
+            // so type errors and unconditional const-evaluation failures are reported even when
+            // no call omits the argument.
+            if let Some(default_def_id) = default_def_id.as_local()
+                && let DefKind::AnonConst = tcx.def_kind(default_def_id)
+                && let hir::Node::AnonConst(anon) = tcx.hir_node_by_def_id(default_def_id)
+                && let expr = &tcx.hir_body(anon.body).value
+                && let hir::ExprKind::Path(hir::QPath::Resolved(None, path)) = expr.kind
+                && let Res::Def(DefKind::ConstParam, _) = path.res
+            {
+                // Evaluated after the caller's generic arguments have been substituted.
+            } else {
+                let _ = tcx.const_eval_poly(default_def_id);
+            }
+        }
+    }
+
     check_where_clauses(wfcx, def_id);
 
     if sig.abi() == ExternAbi::RustCall {

@@ -211,7 +211,10 @@ impl<'hir> LoweringContext<'_, 'hir> {
             default_binding_modes: false,
         });
 
-        (hir::Param { hir_id: self.next_id(), pat, ty_span: span, span }, pat_node_id)
+        (
+            hir::Param { hir_id: self.next_id(), pat, default: None, ty_span: span, span },
+            pat_node_id,
+        )
     }
 
     fn generate_arg(

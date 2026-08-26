@@ -78,6 +78,7 @@ struct IsNeverPattern;
 enum AnonConstKind {
     EnumDiscriminant,
     FieldDefaultValue,
+    FnParamDefault,
     InlineConst,
     ConstArg(IsRepeatExpr),
 }
@@ -1119,6 +1120,7 @@ impl<'ast, 'ra, 'tcx> Visitor<'ast> for LateResolutionVisitor<'_, 'ast, 'ra, 'tc
                 self.visit_fn_header(&sig.header);
                 self.visit_ident(ident);
                 self.visit_generics(generics);
+                self.resolve_fn_param_defaults(&sig.decl.inputs);
                 self.resolve_fn_signature(
                     fn_id,
                     sig.decl.has_self(),
@@ -1149,6 +1151,7 @@ impl<'ast, 'ra, 'tcx> Visitor<'ast> for LateResolutionVisitor<'_, 'ast, 'ra, 'tc
                         this.visit_generics(generics);
 
                         let declaration = &sig.decl;
+                        this.resolve_fn_param_defaults(&declaration.inputs);
                         this.resolve_fn_signature(
                             fn_id,
                             declaration.has_self(),
@@ -3988,6 +3991,14 @@ impl<'a, 'ast, 'ra, 'tcx> LateResolutionVisitor<'a, 'ast, 'ra, 'tcx> {
         }
     }
 
+    fn resolve_fn_param_defaults(&mut self, params: &'ast [Param]) {
+        for param in params {
+            if let Some(default) = &param.default {
+                self.resolve_anon_const(default, AnonConstKind::FnParamDefault);
+            }
+        }
+    }
+
     fn resolve_local(&mut self, local: &'ast Local) {
         debug!("resolving local ({:?})", local);
         // Resolve the type.
@@ -5174,6 +5185,7 @@ impl<'a, 'ast, 'ra, 'tcx> LateResolutionVisitor<'a, 'ast, 'ra, 'tcx> {
                 ConstantHasGenerics::No(NoConstantGenericsReason::IsEnumDiscriminant)
             }
             AnonConstKind::FieldDefaultValue => ConstantHasGenerics::Yes,
+            AnonConstKind::FnParamDefault => ConstantHasGenerics::Yes,
             AnonConstKind::InlineConst => ConstantHasGenerics::Yes,
             AnonConstKind::ConstArg(_) => {
                 if self.r.features.generic_const_exprs()

@@ -73,6 +73,54 @@ impl<'tcx> ThirBuildCx<'tcx> {
         exprs.iter().map(|expr| self.mirror_expr(expr)).collect()
     }
 
+    /// Append the constants which type checking selected for omitted trailing arguments.
+    ///
+    /// The function item keeps its ordinary full-arity type. This is the only lowering step
+    /// needed to make the eventual MIR call use that full ABI.
+    fn append_default_call_args(
+        &mut self,
+        call_expr: &hir::Expr<'_>,
+        callee_ty: Ty<'tcx>,
+        args: &mut Vec<ExprId>,
+    ) {
+        let Some(defaults) =
+            self.typeck_results.defaulted_call_args().get(call_expr.hir_id).cloned()
+        else {
+            return;
+        };
+
+        let ty::FnDef(def_id, generic_args) = *callee_ty.kind() else {
+            span_bug!(
+                call_expr.span,
+                "default arguments recorded for non-function-item callee `{callee_ty}`"
+            );
+        };
+        let generic_args = generic_args.no_bound_vars().unwrap();
+        let fn_sig = self.tcx.fn_sig(def_id).instantiate(self.tcx, generic_args).skip_norm_wip();
+        let fn_sig = self.tcx.normalize_erasing_late_bound_regions(self.typing_env, fn_sig);
+        let Some(first_default) = fn_sig.inputs().len().checked_sub(defaults.len()) else {
+            span_bug!(
+                call_expr.span,
+                "more default arguments than inputs for `{}`",
+                self.tcx.def_path_str(def_id),
+            );
+        };
+
+        for (&default_def_id, &input_ty) in defaults.iter().zip(&fn_sig.inputs()[first_default..]) {
+            let default = Expr {
+                temp_scope_id: call_expr.hir_id.local_id,
+                ty: input_ty,
+                span: call_expr.span,
+                kind: ExprKind::NamedConst {
+                    def_id: default_def_id,
+                    args: generic_args,
+                    user_ty: None,
+                },
+            };
+            args.push(self.thir.exprs.push(default));
+        }
+    }
+
     /// Create a THIR expression for the given HIR expression. This expands all
     /// adjustments and directly adds the type information from the
     /// `typeck_results`. See the [dev-guide] for more details.
@@ -405,17 +453,18 @@ impl<'tcx> ThirBuildCx<'tcx> {
                     )
                 } else {
                     // Rewrite a.b(c) into UFCS form like Trait::b(a, c)
-                    let expr = self.method_callee(expr, segment.ident.span, None);
-                    info!("Using method span: {:?}", expr.span);
+                    let callee = self.method_callee(expr, segment.ident.span, None);
+                    info!("Using method span: {:?}", callee.span);
 
-                    let args = std::iter::once(receiver)
+                    let mut args = std::iter::once(receiver)
                         .chain(args.iter())
                         .map(|expr| self.mirror_expr(expr))
-                        .collect();
+                        .collect::<Vec<_>>();
+                    self.append_default_call_args(expr, callee.ty, &mut args);
                     ExprKind::Call {
-                        ty: expr.ty,
-                        fun: self.thir.exprs.push(expr),
-                        args,
+                        ty: callee.ty,
+                        fun: self.thir.exprs.push(callee),
+                        args: args.into_boxed_slice(),
                         from_hir_call: true,
                         fn_span,
                     }
@@ -513,10 +562,15 @@ impl<'tcx> ThirBuildCx<'tcx> {
                             base: AdtExprBase::None,
                         }))
                     } else {
+                        let fun_expr = self.mirror_expr(fun);
+                        let callee_ty = self.thir[fun_expr].ty;
+                        let mut call_args =
+                            args.iter().map(|arg| self.mirror_expr(arg)).collect::<Vec<_>>();
+                        self.append_default_call_args(expr, callee_ty, &mut call_args);
                         ExprKind::Call {
                             ty: self.typeck_results.node_type(fun.hir_id),
-                            fun: self.mirror_expr(fun),
-                            args: self.mirror_exprs(args),
+                            fun: fun_expr,
+                            args: call_args.into_boxed_slice(),
                             from_hir_call: true,
                             fn_span: expr.span,
                         }

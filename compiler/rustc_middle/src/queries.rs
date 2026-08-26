@@ -1550,6 +1550,13 @@ rustc_queries! {
         separate_provide_extern
     }
 
+    /// Returns the anonymous constant corresponding to each function parameter's default value.
+    /// The returned slice is aligned with the function's inputs.
+    query fn_arg_defaults(def_id: DefId) -> &'tcx [Option<DefId>] {
+        desc { "looking up function parameter defaults for `{}`", tcx.def_path_str(def_id) }
+        separate_provide_extern
+    }
+
     /// Gets the rendered value of the specified constant or associated constant.
     /// Used by rustdoc.
     query rendered_const(def_id: DefId) -> &'tcx String {

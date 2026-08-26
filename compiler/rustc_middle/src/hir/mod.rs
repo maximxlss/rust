@@ -472,6 +472,25 @@ pub fn provide(providers: &mut Providers) {
             None => bug!("{def_id:?} doesn't have a type: {node:#?}"),
         }
     };
+    providers.fn_arg_defaults = |tcx, def_id| {
+        let node = tcx.hir_node_by_def_id(def_id);
+        if let Some(body_id) = node.body_id() {
+            tcx.arena.alloc_from_iter(
+                tcx.hir_body(body_id)
+                    .params
+                    .iter()
+                    .map(|param| param.default.map(|default| default.def_id.to_def_id())),
+            )
+        } else if let Some(sig) = node.fn_sig() {
+            tcx.arena.alloc_from_iter(std::iter::repeat_n(None, sig.decl.inputs.len()))
+        } else {
+            span_bug!(
+                tcx.hir_span(tcx.local_def_id_to_hir_id(def_id)),
+                "fn_arg_defaults: unexpected item {:?}",
+                def_id
+            );
+        }
+    };
     providers.fn_arg_idents = |tcx, def_id| {
         let node = tcx.hir_node_by_def_id(def_id);
         if let Some(body_id) = node.body_id() {

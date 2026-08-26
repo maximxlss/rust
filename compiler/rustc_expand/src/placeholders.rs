@@ -162,6 +162,7 @@ pub(crate) fn placeholder(
             pat: pat(),
             span,
             ty: ty(),
+            default: None,
             is_placeholder: true,
         }]),
         AstFragmentKind::FieldDefs => AstFragment::FieldDefs(smallvec![ast::FieldDef {

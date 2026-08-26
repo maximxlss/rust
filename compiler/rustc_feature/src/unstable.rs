@@ -266,6 +266,8 @@ declare_features! (
     (internal, eii_internals, "1.94.0", None),
     /// Implementation details of field representing types.
     (internal, field_representing_type_raw, "1.96.0", None),
+    /// Allows trailing function parameters to declare default values.
+    (incomplete, function_param_defaults, "CURRENT_RUSTC_VERSION", None),
     /// Outputs useful `assert!` messages
     (unstable, generic_assert, "1.63.0", None),
     /// Allows using the #[rustc_intrinsic] attribute.

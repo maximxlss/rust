@@ -27,6 +27,7 @@ use rustc_middle::ty::relate::{Relate, RelateResult, TypeRelation};
 use rustc_middle::ty::{self, IsSuggestable, Ty, TyCtxt, TypeVisitableExt, Unnormalized};
 use rustc_middle::{bug, span_bug};
 use rustc_session::Session;
+use rustc_session::diagnostics::feature_err;
 use rustc_span::{DUMMY_SP, Ident, Span, kw, sym};
 use rustc_trait_selection::error_reporting::infer::{FailureCode, ObligationCauseExt};
 use rustc_trait_selection::infer::InferCtxtExt;
@@ -357,6 +358,72 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let minimum_input_count = expected_input_tys.len();
         let provided_arg_count = provided_args.len();
 
+        // Default arguments are call-site sugar and do not change the callable's type. Only a
+        // concrete function item gives us a `DefId` from which to recover the defaults. In
+        // particular, do not extend this to `FnPtr`, closures, or overloaded `Fn*` calls.
+        // Splatting is also intentionally kept separate from default arguments for now.
+        let default_arg_defs = if !c_variadic
+            && tuple_arguments == TupleArgumentsFlag::DontTupleArguments
+            && provided_arg_count < minimum_input_count
+            && let SplatLoweringInfo::FnDef(def_id) = fn_id
+            && matches!(tcx.def_kind(def_id), DefKind::Fn | DefKind::AssocFn)
+        {
+            let defaults = tcx.fn_arg_defaults(def_id);
+            let defaults = match call_expr.kind {
+                // Method checking has already removed the receiver from both the formal and
+                // provided argument lists, while the query remains aligned with the full
+                // signature.
+                hir::ExprKind::MethodCall(..)
+                    if defaults.len() == minimum_input_count.saturating_add(1) =>
+                {
+                    &defaults[1..]
+                }
+                _ if defaults.len() == minimum_input_count => defaults,
+                _ => &[],
+            };
+
+            Some(defaults)
+        } else {
+            None
+        };
+        let required_input_count = default_arg_defs
+            .and_then(|defaults| defaults.iter().position(Option::is_some))
+            .unwrap_or(minimum_input_count);
+        let defaulted_call_args = default_arg_defs.and_then(|defaults| {
+            defaults
+                .get(provided_arg_count..minimum_input_count)
+                .and_then(|defaults| defaults.iter().copied().collect::<Option<Vec<_>>>())
+        });
+
+        if let Some(defaults) = &defaulted_call_args {
+            if !tcx.features().function_param_defaults()
+                && !call_span.allows_unstable(sym::function_param_defaults)
+            {
+                feature_err(
+                    tcx.sess,
+                    sym::function_param_defaults,
+                    call_span,
+                    "omitting function arguments with default values is experimental",
+                )
+                .emit();
+            }
+            self.typeck_results
+                .borrow_mut()
+                .defaulted_call_args_mut()
+                .insert(call_expr.hir_id, defaults.clone());
+
+            // The argument expressions above provide spans for the usual input-type WF
+            // obligations. Omitted arguments have no expression of their own, but their formal
+            // types must still be well-formed at the call site to validate implied bounds.
+            for &fn_input_ty in formal_input_tys.iter().skip(provided_arg_count) {
+                self.register_wf_obligation(
+                    fn_input_ty.into(),
+                    call_span,
+                    ObligationCauseCode::WellFormed(None),
+                );
+            }
+        }
+
         // We introduce a helper function to demand that a given argument satisfy a given input
         // This is more complicated than just checking type equality, as arguments could be coerced
         // This version writes those types back so further type checking uses the narrowed types
@@ -426,7 +493,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let mut call_appears_satisfied = if c_variadic {
             provided_arg_count >= minimum_input_count
         } else {
-            provided_arg_count == minimum_input_count
+            provided_arg_count == minimum_input_count || defaulted_call_args.is_some()
         };
 
         // Check the arguments.
@@ -568,11 +635,23 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 expected_input_tys.len(),
                 "expected formal_input_tys to be the same size as expected_input_tys"
             );
+            // Optional trailing inputs should not participate in error matching. If all omitted
+            // inputs had defaults, matching only the provided prefix preserves a focused type
+            // mismatch. Otherwise, include the required prefix so the diagnostic asks only for
+            // arguments that the caller must provide.
+            let input_count_for_diagnostics = if defaulted_call_args.is_some() {
+                provided_arg_count
+            } else if provided_arg_count < required_input_count {
+                required_input_count
+            } else {
+                minimum_input_count
+            };
             let formal_and_expected_inputs = IndexVec::from_iter(
                 formal_input_tys
                     .iter()
                     .copied()
                     .zip_eq(expected_input_tys.iter().copied())
+                    .take(input_count_for_diagnostics)
                     .map(|vars| self.resolve_vars_if_possible(vars)),
             );
 
@@ -1745,7 +1824,10 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
                 // FIXME(splat): fix the generic mismatch earlier, so it doesn't reach here
                 if !tuple_arguments.is_splatted() {
-                    debug_assert_eq!(params_with_generics.len(), matched_inputs.len());
+                    // Defaulted trailing parameters are intentionally absent from the argument
+                    // matching matrix.
+                    debug_assert!(params_with_generics.len() >= matched_inputs.len());
+                    debug_assert_eq!(matched_inputs.len(), formal_and_expected_inputs.len());
                 }
                 // Gather all mismatched parameters with generics.
                 let mut mismatched_params = Vec::<MismatchedParam<'_>>::new();
@@ -2002,9 +2084,14 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         if let Some((params_with_generics, _)) = self.get_hir_param_info(def_id, is_method) {
             // FIXME(splat): fix the generic mismatch earlier, so it doesn't reach here
             if !is_splat {
-                debug_assert_eq!(params_with_generics.len(), matched_inputs.len());
+                // Defaulted trailing parameters are intentionally absent from the argument
+                // matching matrix.
+                debug_assert!(params_with_generics.len() >= matched_inputs.len());
+                debug_assert_eq!(matched_inputs.len(), formal_and_expected_inputs.len());
             }
-            for (idx, (generic_param, _)) in params_with_generics.iter_enumerated() {
+            for (idx, (generic_param, _)) in
+                params_with_generics.iter_enumerated().take(matched_inputs.len())
+            {
                 if matched_inputs.get(idx).flatten_ref().is_none() {
                     continue;
                 }
@@ -2020,6 +2107,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
                 let idxs_matched = params_with_generics
                     .iter_enumerated()
+                    .take(matched_inputs.len())
                     .filter(|&(other_idx, (other_generic_param, _))| {
                         if other_idx == idx {
                             return false;
@@ -2041,7 +2129,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 let expected_display_type = self
                     .resolve_vars_if_possible(formal_and_expected_inputs[idx].1)
                     .sort_string(self.tcx);
-                let label = if idxs_matched == params_with_generics.len() - 1 {
+                let label = if idxs_matched == matched_inputs.len() - 1 {
                     format!(
                         "expected all arguments to be this {} type because they need to match the type of this parameter",
                         expected_display_type

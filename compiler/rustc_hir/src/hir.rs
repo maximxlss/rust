@@ -3692,6 +3692,7 @@ pub struct Param<'hir> {
     #[stable_hash(ignore)]
     pub hir_id: HirId,
     pub pat: &'hir Pat<'hir>,
+    pub default: Option<&'hir AnonConst>,
     pub ty_span: Span,
     pub span: Span,
 }
@@ -5209,7 +5210,7 @@ mod size_asserts {
     static_assert_size!(Item<'_>, 88);
     static_assert_size!(ItemKind<'_>, 64);
     static_assert_size!(LetStmt<'_>, 64);
-    static_assert_size!(Param<'_>, 32);
+    static_assert_size!(Param<'_>, 40);
     static_assert_size!(Pat<'_>, 80);
     static_assert_size!(PatKind<'_>, 56);
     static_assert_size!(Path<'_>, 40);

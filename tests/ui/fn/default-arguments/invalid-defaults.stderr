@@ -1,0 +1,71 @@
+error[E0425]: cannot find value `first` in this scope
+  --> $DIR/invalid-defaults.rs:14:51
+   |
+LL | fn references_parameter(first: i32, second: i32 = first) {}
+   |                                                   ^^^^^ not found in this scope
+
+error[E0015]: cannot call non-const function `runtime` in constants
+  --> $DIR/invalid-defaults.rs:8:27
+   |
+LL | fn non_const(value: i32 = runtime()) {}
+   |                           ^^^^^^^^^
+   |
+note: function `runtime` is not const
+  --> $DIR/invalid-defaults.rs:4:1
+   |
+LL | fn runtime() -> i32 {
+   | ^^^^^^^^^^^^^^^^^^^
+   = note: calls in constants are limited to constant functions, tuple structs and tuple variants
+
+error[E0308]: mismatched types
+  --> $DIR/invalid-defaults.rs:11:28
+   |
+LL | fn wrong_type(value: i32 = "not an integer") {}
+   |                            ^^^^^^^^^^^^^^^^ expected `i32`, found `&str`
+
+error: defaults for parameters with late-bound lifetimes are not supported
+  --> $DIR/invalid-defaults.rs:17:34
+   |
+LL | fn elided_lifetime(value: &str = "default") {}
+   |                                  ^^^^^^^^^
+
+error: defaults for parameters with late-bound lifetimes are not supported
+  --> $DIR/invalid-defaults.rs:20:51
+   |
+LL | fn explicit_lifetime<'a>(value: Option<&'a str> = None) {}
+   |                                                   ^^^^
+
+error[E0061]: this function takes 1 argument but 0 arguments were supplied
+  --> $DIR/invalid-defaults.rs:26:5
+   |
+LL |     still_required();
+   |     ^^^^^^^^^^^^^^-- argument #1 of type `i32` is missing
+   |
+note: function defined here
+  --> $DIR/invalid-defaults.rs:23:4
+   |
+LL | fn still_required(required: i32, optional: i32 = 2) {}
+   |    ^^^^^^^^^^^^^^ -------------
+help: provide the argument
+   |
+LL |     still_required(/* i32 */);
+   |                    +++++++++
+
+error[E0308]: mismatched types
+  --> $DIR/invalid-defaults.rs:29:20
+   |
+LL |     still_required("wrong");
+   |     -------------- ^^^^^^^ expected `i32`, found `&str`
+   |     |
+   |     arguments to this function are incorrect
+   |
+note: function defined here
+  --> $DIR/invalid-defaults.rs:23:4
+   |
+LL | fn still_required(required: i32, optional: i32 = 2) {}
+   |    ^^^^^^^^^^^^^^ -------------
+
+error: aborting due to 7 previous errors
+
+Some errors have detailed explanations: E0015, E0061, E0308, E0425.
+For more information about an error, try `rustc --explain E0015`.

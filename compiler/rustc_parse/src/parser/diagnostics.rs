@@ -59,6 +59,7 @@ pub(super) fn dummy_arg(ident: Ident, guar: ErrorGuaranteed) -> Param {
         pat,
         span: ident.span,
         ty: Box::new(ty),
+        default: None,
         is_placeholder: false,
     }
 }

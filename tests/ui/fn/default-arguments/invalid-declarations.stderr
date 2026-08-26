@@ -1,0 +1,48 @@
+error: parameters without a default cannot follow parameters with defaults
+  --> $DIR/invalid-declarations.rs:4:43
+   |
+LL | fn required_after_default(first: i32 = 1, second: i32) {}
+   |                                        -  ^^^^^^^^^^^ this parameter is missing a default
+   |                                        |
+   |                                        this parameter has a default
+
+error: default function parameters are not allowed in function pointer types
+  --> $DIR/invalid-declarations.rs:7:40
+   |
+LL | type FunctionPointer = fn(value: i32 = 1);
+   |                        ----------------^- this declaration is one of function pointer types
+
+error: default function parameters are not allowed in foreign function declarations
+  --> $DIR/invalid-declarations.rs:11:29
+   |
+LL |     fn foreign(value: i32 = 1);
+   |     ------------------------^-- this declaration is one of foreign function declarations
+
+error: default function parameters are not allowed in functions with a non-Rust ABI
+  --> $DIR/invalid-declarations.rs:15:41
+   |
+LL | extern "C" fn non_rust_abi(value: i32 = 1) {}
+   | ----------                              ^
+   | |
+   | this declaration is one of functions with a non-Rust ABI
+
+error: default function parameters are not allowed in trait methods
+  --> $DIR/invalid-declarations.rs:19:28
+   |
+LL |     fn method(value: i32 = 1);
+   |     -----------------------^-- this declaration is one of trait methods
+
+error: the `self` parameter cannot have a default
+  --> $DIR/invalid-declarations.rs:26:24
+   |
+LL |     fn receiver(self = Value) {}
+   |                        ^^^^^
+
+error: default function parameters are not allowed in trait implementation methods
+  --> $DIR/invalid-declarations.rs:31:28
+   |
+LL |     fn method(value: i32 = 1) {}
+   |     -----------------------^- this declaration is one of trait implementation methods
+
+error: aborting due to 7 previous errors
+

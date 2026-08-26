@@ -684,6 +684,13 @@ impl<'cx, 'tcx> WritebackCx<'cx, 'tcx> {
             self.typeck_results.splatted_defs_mut().insert(hir_id, def);
         }
 
+        // Export constants supplied for omitted default function arguments.
+        if let Some(defaults) =
+            self.fcx.typeck_results.borrow_mut().defaulted_call_args_mut().remove(hir_id)
+        {
+            self.typeck_results.defaulted_call_args_mut().insert(hir_id, defaults);
+        }
+
         // Resolve any borrowings for the node with id `node_id`
         self.visit_adjustments(span, hir_id);
 

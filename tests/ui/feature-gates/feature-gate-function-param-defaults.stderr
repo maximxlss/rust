@@ -1,27 +1,21 @@
-error: default function parameters are not allowed in function pointer types
-  --> $DIR/param-default.rs:4:21
-   |
-LL | type Foo = fn(i32 = 0);
-   |            ---------^- this declaration is one of function pointer types
-
 error[E0658]: default values for function parameters are experimental
-  --> $DIR/param-default.rs:1:15
+  --> $DIR/feature-gate-function-param-defaults.rs:1:25
    |
-LL | fn foo(x: i32 = 1) {}
-   |               ^^^
+LL | fn defaulted(value: i32 = 1) -> i32 {
+   |                         ^^^
    |
    = help: add `#![feature(function_param_defaults)]` to the crate attributes to enable
    = note: this compiler was built on YYYY-MM-DD; consider upgrading it if it is out of date
 
-error[E0658]: default values for function parameters are experimental
-  --> $DIR/param-default.rs:4:19
+error[E0658]: omitting function arguments with default values is experimental
+  --> $DIR/feature-gate-function-param-defaults.rs:7:13
    |
-LL | type Foo = fn(i32 = 0);
-   |                   ^^^
+LL |     let _ = defaulted();
+   |             ^^^^^^^^^^^
    |
    = help: add `#![feature(function_param_defaults)]` to the crate attributes to enable
    = note: this compiler was built on YYYY-MM-DD; consider upgrading it if it is out of date
 
-error: aborting due to 3 previous errors
+error: aborting due to 2 previous errors
 
 For more information about this error, try `rustc --explain E0658`.

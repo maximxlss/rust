@@ -2258,6 +2258,12 @@ impl<'a> State<'a> {
                 }
             }
         }
+        if let Some(default) = &input.default {
+            self.space();
+            self.word("=");
+            self.space();
+            self.print_expr(&default.value, FixupContext::default());
+        }
         self.end(ib);
     }
 

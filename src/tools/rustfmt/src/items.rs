@@ -2291,7 +2291,7 @@ impl Rewrite for ast::Param {
             (mk_sp(self.span.lo(), self.span.lo()), false, false)
         };
 
-        if let Some(ref explicit_self) = self.to_self() {
+        let result = if let Some(ref explicit_self) = self.to_self() {
             rewrite_explicit_self(
                 context,
                 explicit_self,
@@ -2299,7 +2299,7 @@ impl Rewrite for ast::Param {
                 span,
                 shape,
                 has_multiple_attr_lines,
-            )
+            )?
         } else if is_named_param(self) {
             let param_name = &self
                 .pat
@@ -2359,7 +2359,7 @@ impl Rewrite for ast::Param {
                 }
             }
 
-            Ok(result)
+            result
         } else {
             combine_strs_with_missing_comments(
                 context,
@@ -2368,8 +2368,34 @@ impl Rewrite for ast::Param {
                 span,
                 shape,
                 !has_multiple_attr_lines && !has_doc_comments,
-            )
-        }
+            )?
+        };
+
+        let Some(default) = &self.default else {
+            return Ok(result);
+        };
+
+        let between_ty_and_default = mk_sp(self.ty.span.hi(), default.value.span.lo());
+        let eq_lo = context
+            .snippet_provider
+            .opt_span_before(between_ty_and_default, "=")
+            .unknown_error()?;
+        let before_eq = mk_sp(self.ty.span.hi(), eq_lo);
+        let result = combine_strs_with_missing_comments(
+            context, &result, "=", before_eq, shape, true,
+        )?;
+        let after_eq = mk_sp(eq_lo + BytePos(1), default.value.span.lo());
+
+        rewrite_assign_rhs_with_comments(
+            context,
+            result,
+            &*default.value,
+            shape,
+            &RhsAssignKind::Expr(&default.value.kind, default.value.span),
+            RhsTactics::Default,
+            after_eq,
+            true,
+        )
     }
 }
 
@@ -2439,6 +2465,10 @@ pub(crate) fn span_lo_for_param(param: &ast::Param) -> BytePos {
 }
 
 pub(crate) fn span_hi_for_param(context: &RewriteContext<'_>, param: &ast::Param) -> BytePos {
+    if let Some(default) = &param.default {
+        return default.value.span.hi();
+    }
+
     match param.ty.kind {
         ast::TyKind::Infer if context.snippet(param.ty.span) == "_" => param.ty.span.hi(),
         ast::TyKind::Infer if is_named_param(param) => param.pat.span.hi(),
@@ -2863,7 +2893,7 @@ fn rewrite_params(
         ")",
         ",",
         |param| span_lo_for_param(param),
-        |param| param.ty.span.hi(),
+        |param| span_hi_for_param(context, param),
         |param| {
             param
                 .rewrite_result(context, Shape::legacy(multi_line_budget, param_indent))

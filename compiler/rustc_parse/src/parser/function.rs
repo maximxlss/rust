@@ -732,6 +732,8 @@ impl<'a> Parser<'a> {
             // Possibly parse `self`. Recover if we parsed it and it wasn't allowed here.
             if let Some(mut param) = this.parse_self_param()? {
                 param.attrs = attrs;
+                param.default = this.parse_fn_param_default()?;
+                param.span = lo.to(this.prev_token.span);
                 let res = if first_param { Ok(param) } else { this.recover_bad_self_param(param) };
                 return Ok((res?, Trailing::No, UsePreAttrPos::No));
             }
@@ -800,7 +802,10 @@ impl<'a> Parser<'a> {
                         ));
                     }
 
-                    if this.token != token::Comma && this.token != token::CloseParen {
+                    if this.token != token::Comma
+                        && this.token != token::CloseParen
+                        && this.token != token::Eq
+                    {
                         // This wasn't actually a type, but a pattern looking like a type,
                         // so we are going to rollback and re-parse for recovery.
                         ty = this.unexpected_any();
@@ -824,14 +829,35 @@ impl<'a> Parser<'a> {
                 }
             };
 
+            let default = this.parse_fn_param_default()?;
             let span = lo.to(this.prev_token.span);
 
             Ok((
-                Param { attrs, id: ast::DUMMY_NODE_ID, is_placeholder: false, pat, span, ty },
+                Param {
+                    attrs,
+                    id: ast::DUMMY_NODE_ID,
+                    is_placeholder: false,
+                    pat,
+                    default,
+                    span,
+                    ty,
+                },
                 Trailing::No,
                 UsePreAttrPos::No,
             ))
         })
+    }
+
+    fn parse_fn_param_default(&mut self) -> PResult<'a, Option<Box<AnonConst>>> {
+        if self.token != token::Eq {
+            return Ok(None);
+        }
+
+        self.bump();
+        let eq_span = self.prev_token.span;
+        let default = self.parse_expr_anon_const()?;
+        self.psess.gated_spans.gate(sym::function_param_defaults, eq_span.to(default.value.span));
+        Ok(Some(Box::new(default)))
     }
 
     /// Returns the parsed optional self parameter and whether a self shortcut was used.

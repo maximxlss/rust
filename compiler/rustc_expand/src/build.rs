@@ -665,6 +665,7 @@ impl<'a> ExtCtxt<'a> {
             pat,
             span,
             ty,
+            default: None,
             is_placeholder: false,
         }
     }

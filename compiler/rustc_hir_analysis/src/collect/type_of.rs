@@ -384,6 +384,27 @@ fn anon_const_type_of<'tcx>(icx: &ItemCtxt<'tcx>, def_id: LocalDefId) -> Ty<'tcx
             tcx.type_of(field_def_id).instantiate_identity().skip_norm_wip()
         }
 
+        Node::Param(param) if param.default.is_some_and(|default| default.hir_id == hir_id) => {
+            let fn_def_id = tcx.hir_get_parent_item(param.hir_id).def_id;
+            let body = tcx.hir_body_owned_by(fn_def_id);
+            let param_idx = body
+                .params
+                .iter()
+                .position(|candidate| candidate.hir_id == param.hir_id)
+                .unwrap_or_else(|| {
+                    span_bug!(param.span, "function parameter missing from its owner's body")
+                });
+            let sig = tcx.fn_sig(fn_def_id).instantiate_identity().skip_norm_wip();
+            if sig.skip_binder().inputs()[param_idx].has_escaping_bound_vars() {
+                let guar = tcx.dcx().span_err(
+                    param.default.unwrap().span,
+                    "defaults for parameters with late-bound lifetimes are not supported",
+                );
+                return Ty::new_error(tcx, guar);
+            }
+            tcx.liberate_late_bound_regions(fn_def_id.to_def_id(), sig).inputs()[param_idx]
+        }
+
         _ => Ty::new_error_with_message(
             tcx,
             span,

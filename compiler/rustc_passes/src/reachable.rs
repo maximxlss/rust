@@ -200,6 +200,14 @@ impl<'tcx> ReachableContext<'tcx> {
             self.reachable_symbols.insert(search_item);
         }
 
+        // Function parameter defaults are evaluated in downstream crates at omitted-argument
+        // call sites. Like exported constants, their resulting values can contain pointers to
+        // otherwise-private functions or statics, so propagate reachability through them even
+        // when the callable's ordinary runtime body does not need cross-crate MIR.
+        if matches!(self.tcx.def_kind(search_item), DefKind::Fn | DefKind::AssocFn) {
+            self.propagate_fn_arg_defaults(search_item);
+        }
+
         match *node {
             Node::Item(item) => {
                 match item.kind {
@@ -309,6 +317,29 @@ impl<'tcx> ReachableContext<'tcx> {
                     self.tcx.hir_id_to_string(self.tcx.local_def_id_to_hir_id(search_item)),
                     node,
                 );
+            }
+        }
+    }
+
+    fn propagate_fn_arg_defaults(&mut self, fn_def_id: LocalDefId) {
+        for &default_def_id in self.tcx.fn_arg_defaults(fn_def_id).iter().flatten() {
+            let default_def_id = default_def_id.expect_local();
+            let Node::AnonConst(default) = self.tcx.hir_node_by_def_id(default_def_id) else {
+                bug!("function parameter default is not an anonymous constant: {default_def_id:?}");
+            };
+
+            match self.tcx.const_eval_poly_to_alloc(default_def_id.to_def_id()) {
+                Ok(alloc) => {
+                    // Only pointers which survive evaluation need runtime linkage. Everything
+                    // else used by evaluation is available through the encoded CTFE MIR.
+                    let alloc = self.tcx.global_alloc(alloc.alloc_id).unwrap_memory();
+                    self.propagate_from_alloc(alloc);
+                }
+                // A generic default cannot be evaluated before instantiation. Conservatively
+                // propagate everything mentioned in its body, as for generic exported consts.
+                Err(ErrorHandled::TooGeneric(_)) => self.visit_nested_body(default.body),
+                // Compilation already failed, so no value can escape through this default.
+                Err(ErrorHandled::Reported(..)) => {}
             }
         }
     }

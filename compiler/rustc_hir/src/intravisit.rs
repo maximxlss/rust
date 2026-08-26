@@ -535,9 +535,11 @@ pub trait VisitorExt<'v>: Visitor<'v> {
 impl<'v, V: Visitor<'v>> VisitorExt<'v> for V {}
 
 pub fn walk_param<'v, V: Visitor<'v>>(visitor: &mut V, param: &'v Param<'v>) -> V::Result {
-    let Param { hir_id, pat, ty_span: _, span: _ } = param;
+    let Param { hir_id, pat, default, ty_span: _, span: _ } = param;
     try_visit!(visitor.visit_id(*hir_id));
-    visitor.visit_pat(pat)
+    try_visit!(visitor.visit_pat(pat));
+    visit_opt!(visitor, visit_anon_const, default);
+    V::Result::output()
 }
 
 pub fn walk_item<'v, V: Visitor<'v>>(visitor: &mut V, item: &'v Item<'v>) -> V::Result {

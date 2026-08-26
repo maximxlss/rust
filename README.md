@@ -1,6 +1,39 @@
 # Fork readme
-This is my fork of rust, it contains some experiments:
-- Spreads support: [spreads](https://github.com/maximxlss/rust/tree/spreads)
+This is my fork of Rust with experimental support for default function
+arguments:
+
+```rust
+#![feature(function_param_defaults)]
+
+fn score(base: i32, multiplier: i32 = 2, bonus: i32 = 1) -> i32 {
+    base * multiplier + bonus
+}
+
+fn main() {
+    assert_eq!(score(10), 21);
+    assert_eq!(score(10, 3), 31);
+    assert_eq!(score(10, 3, 4), 34);
+}
+```
+
+To run it, follow the normal compiler build instructions and enable the
+`function_param_defaults` feature.
+
+### Details
+
+Defaults must form a trailing suffix and are constant expressions evaluated in
+the declaration's scope. The experiment supports free functions, inherent
+methods, generics, and cross-crate calls while preserving the function's full
+type and ABI. Calls through function pointers or `Fn` traits therefore still
+require every argument.
+
+This is intentionally a small implementation for experimentation rather than
+an RFC-ready language feature. Trait methods, closures, foreign/non-Rust
+functions, splatted functions, and defaulted parameter types containing
+late-bound lifetimes are not supported.
+
+The spread syntax experiment is available on the
+[spreads](https://github.com/maximxlss/rust/tree/spreads) branch.
 
 # The original readme
 

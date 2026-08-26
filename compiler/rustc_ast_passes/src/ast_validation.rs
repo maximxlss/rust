@@ -54,6 +54,57 @@ enum SplatSemantic {
     NoAbiCall { span: Span, abi: Symbol },
 }
 
+/// Is a default value on a function parameter allowed in this declaration context?
+#[derive(Clone, Copy)]
+enum FnParamDefaultSemantic {
+    Yes,
+    NoClosures(Span),
+    NoFnPointers(Span),
+    NoForeignFunctions(Span),
+    NoTraitMethods(Span),
+    NoTraitImplMethods(Span),
+    NoNonRustAbi(Span),
+}
+
+impl FnParamDefaultSemantic {
+    fn from_fn_kind(fk: &FnKind<'_>) -> Self {
+        match fk {
+            FnKind::Closure(_, _, _, expr) => Self::NoClosures(expr.span),
+            FnKind::Fn(FnCtxt::Foreign, _, f) => Self::NoForeignFunctions(f.sig.span),
+            FnKind::Fn(FnCtxt::Assoc(AssocCtxt::Trait), _, f) => Self::NoTraitMethods(f.sig.span),
+            FnKind::Fn(FnCtxt::Assoc(AssocCtxt::Impl { of_trait: true }), _, f) => {
+                Self::NoTraitImplMethods(f.sig.span)
+            }
+            FnKind::Fn(_, _, f) => Self::from_extern(f.sig.header.ext),
+        }
+    }
+
+    fn from_extern(ext: Extern) -> Self {
+        match ext {
+            Extern::None => Self::Yes,
+            Extern::Explicit(abi, _)
+                if ExternAbi::from_str(abi.symbol_unescaped.as_str())
+                    .is_ok_and(|abi| matches!(abi, ExternAbi::Rust)) =>
+            {
+                Self::Yes
+            }
+            Extern::Implicit(span) | Extern::Explicit(_, span) => Self::NoNonRustAbi(span),
+        }
+    }
+
+    fn rejection(self) -> Option<(&'static str, Span)> {
+        Some(match self {
+            Self::Yes => return None,
+            Self::NoClosures(span) => ("closures", span),
+            Self::NoFnPointers(span) => ("function pointer types", span),
+            Self::NoForeignFunctions(span) => ("foreign function declarations", span),
+            Self::NoTraitMethods(span) => ("trait methods", span),
+            Self::NoTraitImplMethods(span) => ("trait implementation methods", span),
+            Self::NoNonRustAbi(span) => ("functions with a non-Rust ABI", span),
+        })
+    }
+}
+
 impl SplatSemantic {
     /// Returns if splatting is semantically allowed for the given `FnKind`,
     /// Only checks the function kind and header, not the parameters.
@@ -392,12 +443,85 @@ impl<'a> AstValidator<'a> {
         fn_decl: &FnDecl,
         self_semantic: SelfSemantic,
         splat_semantic: SplatSemantic,
+        default_semantic: FnParamDefaultSemantic,
     ) {
         self.check_decl_num_args(fn_decl);
         let c_variadic_span = self.check_decl_cvariadic_pos(fn_decl);
         self.check_decl_splatting(fn_decl, c_variadic_span, splat_semantic);
+        self.check_decl_param_defaults(fn_decl, c_variadic_span, default_semantic);
         self.check_decl_attrs(fn_decl);
         self.check_decl_self_param(fn_decl, self_semantic);
+    }
+
+    fn check_decl_param_defaults(
+        &self,
+        fn_decl: &FnDecl,
+        c_variadic_span: Option<Span>,
+        semantic: FnParamDefaultSemantic,
+    ) {
+        let Some((first_default_index, first_default_param)) =
+            fn_decl.inputs.iter().enumerate().find(|(_, param)| param.default.is_some())
+        else {
+            return;
+        };
+        let first_default = first_default_param.default.as_ref().unwrap();
+
+        for param in &fn_decl.inputs[first_default_index + 1..] {
+            if param.default.is_none() {
+                let mut err = self.dcx().struct_span_err(
+                    param.span,
+                    "parameters without a default cannot follow parameters with defaults",
+                );
+                err.span_label(first_default.value.span, "this parameter has a default");
+                err.span_label(param.span, "this parameter is missing a default");
+                err.emit();
+            }
+        }
+
+        for param in &fn_decl.inputs {
+            let Some(default) = &param.default else { continue };
+
+            if param.is_self() {
+                self.dcx()
+                    .struct_span_err(
+                        default.value.span,
+                        "the `self` parameter cannot have a default",
+                    )
+                    .emit();
+            }
+
+            if let Some((context, context_span)) = semantic.rejection() {
+                let mut err = self.dcx().struct_span_err(
+                    default.value.span,
+                    format!("default function parameters are not allowed in {context}"),
+                );
+                err.span_label(context_span, format!("this declaration is one of {context}"));
+                err.emit();
+            }
+        }
+
+        if let Some(c_variadic_span) = c_variadic_span {
+            let mut err = self.dcx().struct_span_err(
+                first_default.value.span,
+                "default parameters are not allowed on C-variadic functions",
+            );
+            err.span_label(c_variadic_span, "this function is C-variadic");
+            err.emit();
+        }
+
+        if let Some(splat_span) = fn_decl
+            .inputs
+            .iter()
+            .flat_map(|param| &param.attrs)
+            .find_map(|attr| attr.has_name(sym::rustc_splat).then_some(attr.span))
+        {
+            let mut err = self.dcx().struct_span_err(
+                first_default.value.span,
+                "default parameters cannot be combined with argument splatting",
+            );
+            err.span_label(splat_span, "this parameter is splatted");
+            err.emit();
+        }
     }
 
     /// Emits fatal error if function declaration has more than `u16::MAX` arguments
@@ -1199,6 +1323,7 @@ impl<'a> AstValidator<'a> {
                     &bfty.decl,
                     SelfSemantic::No,
                     SplatSemantic::from_extern(bfty.ext),
+                    FnParamDefaultSemantic::NoFnPointers(ty.span),
                 );
                 Self::check_decl_no_pat(&bfty.decl, |span, _, _| {
                     self.dcx().emit_err(diagnostics::PatternFnPointer { span });
@@ -1940,7 +2065,8 @@ impl Visitor<'_> for AstValidator<'_> {
             _ => SelfSemantic::No,
         };
         let splat_semantic = SplatSemantic::from_fn_kind(&fk);
-        self.check_fn_decl(fk.decl(), self_semantic, splat_semantic);
+        let default_semantic = FnParamDefaultSemantic::from_fn_kind(&fk);
+        self.check_fn_decl(fk.decl(), self_semantic, splat_semantic, default_semantic);
 
         if let Some(&FnHeader { safety, .. }) = fk.header() {
             self.check_item_safety(span, safety);

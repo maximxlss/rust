@@ -39,6 +39,13 @@ pub struct TypeckResults<'tcx> {
     /// Resolved definitions for splatted function calls.
     splatted_defs: ItemLocalMap<Result<SplattedDef<'tcx>, ErrorGuaranteed>>,
 
+    /// Anonymous constants supplied for omitted trailing function arguments.
+    ///
+    /// This is keyed by the call expression. The constants are stored in parameter order and
+    /// correspond to a suffix of the callee's inputs. Calls which supply every argument have no
+    /// entry.
+    defaulted_call_args: ItemLocalMap<Vec<DefId>>,
+
     /// Resolved field indices for field accesses in expressions (`S { field }`, `obj.field`)
     /// or patterns (`S { field }`). The index is often useful by itself, but to learn more
     /// about the field you also need definition of the variant to which the field
@@ -236,6 +243,7 @@ impl<'tcx> TypeckResults<'tcx> {
             hir_owner,
             type_dependent_defs: Default::default(),
             splatted_defs: Default::default(),
+            defaulted_call_args: Default::default(),
             field_indices: Default::default(),
             user_provided_types: Default::default(),
             user_provided_sigs: Default::default(),
@@ -310,6 +318,14 @@ impl<'tcx> TypeckResults<'tcx> {
         &mut self,
     ) -> LocalTableInContextMut<'_, Result<SplattedDef<'tcx>, ErrorGuaranteed>> {
         LocalTableInContextMut { hir_owner: self.hir_owner, data: &mut self.splatted_defs }
+    }
+
+    pub fn defaulted_call_args(&self) -> LocalTableInContext<'_, Vec<DefId>> {
+        LocalTableInContext { hir_owner: self.hir_owner, data: &self.defaulted_call_args }
+    }
+
+    pub fn defaulted_call_args_mut(&mut self) -> LocalTableInContextMut<'_, Vec<DefId>> {
+        LocalTableInContextMut { hir_owner: self.hir_owner, data: &mut self.defaulted_call_args }
     }
 
     pub fn field_indices(&self) -> LocalTableInContext<'_, FieldIdx> {

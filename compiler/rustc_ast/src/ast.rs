@@ -2929,6 +2929,8 @@ pub struct Param {
     pub attrs: AttrVec,
     pub ty: Box<Ty>,
     pub pat: Box<Pat>,
+    /// The default value used when this parameter is omitted at a call site.
+    pub default: Option<Box<AnonConst>>,
     pub id: NodeId,
     pub span: Span,
     pub is_placeholder: bool,
@@ -3033,6 +3035,7 @@ impl Param {
             }),
             span,
             ty,
+            default: None,
             id: DUMMY_NODE_ID,
             is_placeholder: false,
         }
@@ -4499,7 +4502,7 @@ mod size_asserts {
     static_assert_size!(MetaItemKind, 40);
     static_assert_size!(MetaItemLit, 40);
     static_assert_size!(NormalAttr, 80);
-    static_assert_size!(Param, 40);
+    static_assert_size!(Param, 48);
     static_assert_size!(Pat, 64);
     static_assert_size!(PatKind, 48);
     static_assert_size!(Path, 16);

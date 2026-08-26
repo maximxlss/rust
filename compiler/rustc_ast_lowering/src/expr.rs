@@ -832,6 +832,7 @@ impl<'hir> LoweringContext<'_, 'hir> {
                 let param = hir::Param {
                     hir_id: self.next_id(),
                     pat,
+                    default: None,
                     ty_span: self.lower_span(span),
                     span: self.lower_span(span),
                 };

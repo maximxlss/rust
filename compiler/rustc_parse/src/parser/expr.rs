@@ -2653,6 +2653,7 @@ impl<'a> Parser<'a> {
                     attrs,
                     ty,
                     pat,
+                    default: None,
                     span: lo.to(this.prev_token.span),
                     id: DUMMY_NODE_ID,
                     is_placeholder: false,
