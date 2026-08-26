@@ -2,6 +2,8 @@
 This is my fork of Rust with experimental support for default function
 arguments:
 
+The implementation on this branch was authored by Codex.
+
 ```rust
 #![feature(function_param_defaults)]
 
